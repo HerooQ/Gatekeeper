@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GATEKEEPER: Zero Trust Checkpoint</title>
+<style>
+/* GATEKEEPER styles: aqua and mint theme on white. Calibri with fallbacks. */
+:root{--bg:#ffffff;--panel:#f4fcfb;--panel2:#e3f8f5;--line:#b9e7e1;--text:#12343c;--dim:#4f7780;--green:#0b8f6c;--amber:#b86e00;--red:#d03f5b;--blue:#0a8fa6;--violet:#6f62d4;--aqua:#18c1cc;--mint:#3fe0b0;--mono:Calibri,Carlito,Candara,"Segoe UI",system-ui,sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;background:radial-gradient(900px 520px at 12% -8%,#d6f6f1 0,#ffffff 62%) fixed;color:var(--text);font:16px/1.45 Calibri,Carlito,Candara,"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;min-height:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+h1,h2,h3{margin:0}
+.wrap{max-width:1200px;margin:0 auto;padding:14px 14px 50px}
+.dim{color:var(--dim)}
+/* HUD */
+.hud{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;background:linear-gradient(180deg,#ffffff,#e9faf7);border:1px solid var(--line);border-radius:16px;padding:10px 16px;position:sticky;top:8px;z-index:5;box-shadow:0 6px 22px #18c1cc22}
+.brand{font-weight:800;letter-spacing:.14em;color:var(--blue)}
+.stat{font-size:14px;color:var(--dim);font-weight:600;letter-spacing:.03em}.stat b{color:var(--text)}
+.bar{width:110px;height:9px;border-radius:9px;background:#e3f8f5;border:1px solid var(--line);overflow:hidden;display:inline-block;vertical-align:middle}
+.bar.wide{width:100%}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--mint),var(--aqua))}
+.timer{flex:1 1 100px;min-width:90px;height:7px;background:#e3f8f5;border-radius:6px;overflow:hidden}
+.timer i{display:block;height:100%;width:100%;background:var(--aqua)}.timer i.low{background:var(--red)}
+.btn{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px 12px;font-weight:600}.btn:hover{border-color:var(--aqua);background:var(--panel2)}
+/* stage */
+.stage{display:grid;grid-template-columns:310px 1fr;gap:14px;margin-top:14px}
+@media(max-width:840px){.stage{grid-template-columns:1fr}}
+.booth{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;text-align:center;align-self:start;box-shadow:0 8px 26px #18c1cc18}
+.avatar{width:120px;height:120px;border-radius:50%;margin:2px auto 8px;display:grid;place-items:center;font-size:66px;background:radial-gradient(circle,#ffffff,#c8f4ee);border:3px solid var(--aqua);box-shadow:0 0 28px #18c1cc55,inset 0 0 18px #3fe0b033}
+.tag{display:inline-block;font-weight:800;font-size:11px;letter-spacing:.08em;padding:2px 8px;border-radius:6px;border:1px solid}
+.tag.deny{color:var(--red);border-color:var(--red)}.tag.challenge{color:var(--amber);border-color:var(--amber)}
+.nm{font-weight:800;font-size:18px}
+.bubble{margin:12px 0;padding:10px 12px;background:#fff;border:1px solid var(--line);border-radius:14px;text-align:left;font-style:italic}
+.want{margin-top:8px;padding:10px;border-radius:14px;background:#fff;border:2px dashed var(--aqua);text-align:left}
+.want .v{font-weight:900;font-size:22px;letter-spacing:.08em}.want .v.delete{color:var(--red)}.want .v.write,.want .v.approve{color:var(--amber)}.want .v.read{color:var(--green)}
+.sens{display:inline-block;font-weight:800;font-size:11px;padding:2px 8px;border-radius:6px;margin-top:6px;letter-spacing:.04em}
+.sens.s0{background:#d5f7ea;color:#0b7d5e}.sens.s1{background:#fdecc6;color:#8a5200}.sens.s2{background:#fbdce2;color:#b02f49}
+.dots{margin-top:12px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap}.dots i{width:10px;height:10px;border-radius:50%;background:#cdeee9}.dots i.d{background:var(--mint)}.dots i.c{background:var(--aqua);box-shadow:0 0 8px var(--aqua)}
+/* dossier */
+.dossier{position:relative;display:grid;gap:12px;align-content:start}
+.sec{background:#fff;border:1px solid var(--line);border-left:5px solid var(--c,var(--blue));border-radius:14px;padding:10px 14px;box-shadow:0 4px 16px #18c1cc12}
+.sec h3{font-size:14px;letter-spacing:.07em;text-transform:uppercase;margin-bottom:6px;color:var(--c)}.sec h3 small{color:var(--dim);text-transform:none;letter-spacing:0;font-weight:500;margin-left:6px;font-size:13px}
+.s-authn{--c:#0a8fa6}.s-authz{--c:#6f62d4}.s-cond{--c:#b86e00}.s-acct{--c:#0b8f6c}
+.row{display:grid;grid-template-columns:155px 1fr;gap:10px;padding:5px 6px;border-radius:8px;border-bottom:1px solid #e1f4f1}
+.row:last-child{border-bottom:0}.row .lb{color:var(--dim);font-size:14px;font-weight:600}.row .vl{font-size:15px;word-break:break-word;font-weight:500}.row small{color:var(--dim)}
+.row.hl{background:#fde6ea;outline:2px solid var(--red)}
+@media(max-width:520px){.row{grid-template-columns:1fr;gap:0}}
+#stamp{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;z-index:3}
+.stampmark{font-weight:900;font-size:52px;letter-spacing:.1em;border:8px solid;padding:6px 26px;border-radius:14px;background:rgba(255,255,255,.88);animation:stamp .45s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes stamp{from{transform:rotate(-12deg) scale(2.6);opacity:0}to{transform:rotate(-12deg) scale(1);opacity:.96}}
+/* actions */
+.actions{margin-top:14px}
+.btns{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.ab{border:2px solid;border-radius:16px;padding:14px 6px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;transition:transform .08s,box-shadow .12s}
+.ab b{font-weight:900;font-size:21px;letter-spacing:.1em}.ab small{color:var(--dim);font-size:13px}
+.ab:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 20px #12343c1a}
+.ab.allow{border-color:var(--mint);color:var(--green)}.ab.allow:hover{background:#dcfaf0}
+.ab.step{border-color:#f0b24a;color:var(--amber)}.ab.step:hover:not(:disabled){background:#fff3d9}
+.ab.deny{border-color:#f08a9c;color:var(--red)}.ab.deny:hover{background:#fde6ea}
+.ab:disabled{opacity:.4;cursor:not-allowed}
+.reasons{margin-top:10px;padding:12px;background:#fff;border:2px solid #f08a9c;border-radius:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.reasons[hidden]{display:none}
+.chip{border:1px solid var(--line);background:var(--panel2);border-radius:999px;padding:7px 14px;font-weight:600}.chip:hover{border-color:var(--red);background:#fde6ea}.chip kbd{font:700 11px Consolas,monospace;opacity:.6;margin-right:6px}
+.fb{margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid;display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.fb.ok{background:#e2faf2;border-color:var(--mint)}.fb.meh{background:#fff4dc;border-color:#f0b24a}.fb.bad{background:#fde6ea;border-color:#f08a9c}
+.fb .t{flex:1 1 300px}.fb ul{margin:4px 0 0 18px;padding:0}
+.big{background:linear-gradient(180deg,#18b9c8,#0a8396);color:#fff;border:0;border-radius:16px;padding:13px 28px;font-weight:800;letter-spacing:.06em;box-shadow:0 8px 24px #18c1cc66}.big:hover{filter:brightness(1.08)}
+.next{background:var(--blue);color:#fff;border:0;border-radius:10px;padding:9px 18px;font-weight:800;position:relative;overflow:hidden}
+.next i{position:absolute;left:0;bottom:0;height:4px;width:0;background:#ffffffaa}
+/* screens */
+.start{text-align:center;padding-top:30px}.logo{font-size:74px}
+.start h1{font-weight:900;font-size:58px;letter-spacing:.2em;background:linear-gradient(90deg,#0a8fa6,#14b98b);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--blue);font-weight:700;letter-spacing:.05em}.pitch{max-width:640px;margin:14px auto;color:var(--dim)}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:18px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;text-align:left}
+.card h3{margin-bottom:4px}.card p{margin:4px 0;color:var(--dim);font-size:14.5px}.card .an{color:var(--text);font-style:italic}
+.opts{display:flex;flex-wrap:wrap;gap:14px 24px;justify-content:center;margin:20px 0;color:var(--dim);font-weight:600}
+.opts input[type=text],.opts select{background:#fff;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit}
+.fine{color:var(--dim);font-size:14px}
+.memo{max-width:820px;margin:20px auto;background:#fff;color:#12343c;border:1px solid var(--line);border-top:7px solid var(--aqua);border-radius:14px;padding:22px 26px;box-shadow:0 12px 40px #18c1cc2a}
+.memo h2{font-weight:800;font-size:15px;letter-spacing:.14em;color:var(--blue);border-bottom:2px solid var(--line);padding-bottom:6px;margin-bottom:12px}
+.memo ul{margin:6px 0 6px 20px;padding:0}.memo .an{background:var(--panel2);padding:8px 10px;border-radius:10px;margin:10px 0;font-style:italic}
+.memo .tg{display:inline-block;font-weight:800;font-size:10px;padding:1px 6px;border-radius:4px;color:#fff;margin-right:6px}.memo .tg.deny{background:var(--red)}.memo .tg.challenge{background:#d98a12}
+.center{text-align:center}
+.mrow{display:grid;grid-template-columns:200px 1fr 60px;gap:10px;align-items:center;margin:6px 0}
+.grade{font-weight:900;font-size:80px;color:var(--aqua)}
+.list{margin:6px 0 0 18px;padding:0;color:var(--dim)}
+.cd{height:7px;max-width:420px;margin:0 auto 12px;background:#e3f8f5;border-radius:6px;overflow:hidden}.cd i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--mint),var(--aqua))}
+.recap{max-width:820px;margin:14px auto 0}.rh{display:flex;gap:16px;align-items:center;margin-bottom:8px}.grade.sm{font-size:48px}
+/* modal / drawer */
+#modal{position:fixed;inset:0;background:rgba(18,52,60,.5);display:none;place-items:center;z-index:50;padding:14px;overflow:auto}
+#modal.open{display:grid}
+.mbox{max-width:760px;width:100%;background:#fff;border:3px solid var(--red);border-radius:18px;padding:20px;max-height:92vh;overflow:auto;animation:pop .25s ease-out;box-shadow:0 20px 60px #12343c44}
+.mbox.warn{border-color:#f0b24a}.mbox.good{border-color:var(--mint)}
+@keyframes pop{from{transform:scale(.92);opacity:0}}
+.mbox h2{font-weight:900;font-size:22px;letter-spacing:.03em}.mbox.warn h2{color:var(--amber)}.mbox:not(.warn):not(.good) h2{color:var(--red)}
+.reveal{display:flex;gap:14px;align-items:center;margin:12px 0}.reveal .face{font-size:54px}
+.ms{margin:12px 0;padding:10px 12px;background:var(--panel);border-radius:12px;border-left:4px solid var(--aqua)}.ms h4{margin:0 0 4px;font-weight:800;font-size:12px;letter-spacing:.1em;color:var(--blue);text-transform:uppercase}
+.ms.r{border-color:var(--red)}.ms.r h4{color:var(--red)}.ms.g{border-color:var(--mint)}.ms.g h4{color:var(--green)}.ms.a{border-color:#f0b24a}.ms.a h4{color:var(--amber)}
+.ms ul{margin:4px 0 0 18px;padding:0}
+details summary{cursor:pointer;color:var(--blue);margin:8px 0;font-weight:700}
+.rb{position:fixed;top:0;right:0;bottom:0;width:min(460px,100%);background:#fff;border-left:3px solid var(--aqua);z-index:40;transform:translateX(105%);transition:transform .25s;overflow:auto;padding:16px;box-shadow:-10px 0 40px #12343c22}
+.rb.open{transform:none}.rb ul{padding-left:18px}.rb li{margin:6px 0}.rb .def{color:var(--text)}.rb .analogy{color:var(--dim);font-style:italic}
+.rbsec{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:12px 0}
+/* celebration */
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.win{position:relative;z-index:2;padding-top:24px}
+.trophy{font-size:120px;line-height:1.1;animation:drop .9s cubic-bezier(.2,1.5,.4,1) both,glow 2.4s ease-in-out infinite .9s;filter:drop-shadow(0 0 30px #ffc24aaa)}
+@keyframes drop{from{transform:translateY(-320px) scale(.4) rotate(-30deg);opacity:0}}
+@keyframes glow{50%{filter:drop-shadow(0 0 55px #ffd36e)}}
+.kicker{font-weight:800;font-size:14px;letter-spacing:.3em;color:var(--blue)}
+.wt{font-weight:900;font-size:clamp(32px,7vw,72px);letter-spacing:.1em;margin:6px 0;background:linear-gradient(90deg,#0a8fa6,#18c1cc,#3fe0b0,#f0b24a,#18c1cc,#0a8fa6);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:up .7s ease-out forwards,shine 4s linear infinite}
+@keyframes shine{to{background-position:300% 0}}
+.rank{font-weight:800;font-size:clamp(18px,3.4vw,28px);color:var(--amber)}
+.up{opacity:0;animation:up .7s ease-out forwards}
+@keyframes up{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
+@keyframes pop2{from{transform:scale(.3);opacity:0}to{transform:none;opacity:1}}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;max-width:820px;margin:18px auto}
+.sc{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;color:var(--dim);font-size:14px;font-weight:600}.sc b{display:block;font-weight:900;font-size:38px;color:var(--blue)}
+.badge{display:inline-flex;gap:10px;align-items:center;text-align:left;background:#fff;border:2px solid var(--mint);border-radius:16px;padding:10px 14px;margin:6px;opacity:0;animation:pop2 .5s cubic-bezier(.2,1.5,.4,1) forwards;box-shadow:0 6px 18px #3fe0b033}.badge span{font-size:30px}
+.cert{max-width:780px;margin:22px auto;padding:28px 34px;background:linear-gradient(180deg,#ffffff,#effcfa);color:#12343c;border:7px double var(--aqua);border-radius:10px;box-shadow:0 14px 50px #18c1cc33;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.cert h2{font-weight:900;font-size:30px;margin:6px 0;color:var(--blue)}.cs{letter-spacing:.2em;font-weight:800;font-size:12px;color:var(--green)}
+.cname{font:italic 700 34px Calibri,Carlito,Candara,sans-serif;text-align:center;border:0;border-bottom:2px solid var(--aqua);background:transparent;color:#12343c;width:min(420px,90%);margin:10px 0;outline:none}
+.cdate{margin-top:14px;font-size:15px;color:var(--dim)}
+@media print{body{background:#fff!important}body *{visibility:hidden}.cert,.cert *{visibility:visible}.cert{position:absolute;left:0;top:0;width:100%;box-shadow:none;opacity:1!important;animation:none!important}#fx{display:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="rb" class="rb"></div>
+<noscript>This game needs JavaScript enabled.</noscript>
+
+<!-- Plain scripts (not ES modules) so the game still runs by double-clicking index.html.
+     Order matters: each file may use things defined in the ones above it. -->
+<script>
+/* js/core/utils.js */
+/* ============================================================
+   Utilities
+   DOM helper, seeded random numbers (class codes) and small formatters.
+   ============================================================ */
+'use strict';
+
+const $=(s,el)=>(el||document).querySelector(s);
+let rnd=Math.random;
+function seedRng(str){let h=2166136261>>>0;for(const ch of String(str)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0}let a=h;rnd=function(){a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}}
+const ri=(a,b)=>a+Math.floor(rnd()*(b-a+1));
+const pick=a=>a[Math.floor(rnd()*a.length)];
+const chance=p=>rnd()<p;
+const pad=n=>String(n).padStart(2,'0');
+const fmtMins=m=>m<60?m+' min':m<1440?Math.round(m/60)+' h':Math.round(m/1440)+' days';
+</script>
+<script>
+/* js/core/data.js */
+/* ============================================================
+   World data
+   Names, countries, roles, resources and their ACLs, and the four security concepts (with analogies).
+   ============================================================ */
+'use strict';
+
+const HOME=['South Africa','United Kingdom','United States','Germany','Kenya'];
+const FOREIGN=['Canada','Japan','Brazil','Poland','Thailand','Mexico','Chile','Norway','Vietnam','Romania'];
+const CITY={'South Africa':['Johannesburg','Cape Town','Durban','Pretoria'],'United Kingdom':['London','Manchester'],'United States':['New York','Austin'],'Germany':['Berlin','Munich'],'Kenya':['Nairobi'],Canada:['Toronto'],Japan:['Tokyo'],Brazil:['São Paulo'],Poland:['Warsaw'],Thailand:['Bangkok'],Mexico:['Mexico City'],Chile:['Santiago'],Norway:['Oslo'],Vietnam:['Hanoi'],Romania:['Bucharest']};
+const FIRST=['Priya','Thabo','Lerato','Sipho','Amara','Jonas','Mei','Carlos','Fatima','Liam','Nomsa','Chen','Aisha','Pieter','Zanele','Oliver','Naledi','Hassan','Emma','Kabelo','Ingrid','Tendai','Sofia','Mandla','Yusuf','Anika','Dewald','Palesa','Ravi','Grace'];
+const LAST=['Naidoo','Mokoena','Van der Merwe','Okafor','Dlamini','Smith','Patel','Nkosi','Botha','Khumalo','Fischer','Mensah','Pillay','Jacobs','Mahlangu','Ndlovu','Williams','Kruger','Sithole','Chowdhury','Tshabalala','Coetzee','Lindqvist','Abdi'];
+const AVATARS=['🧑‍💼','👩‍💼','👨‍💼','🧑‍💻','👩‍💻','👨‍💻','🧑‍🔧','👩‍🔧','🧑‍🏫','🧑‍🎨','👩‍🔬','👨‍🔬'];
+const MFA=['Authenticator app (number match)','Hardware security key','Authenticator app (code)'];
+const NETS=['Residential ISP','Corporate VPN','Office network','Mobile carrier'];
+const SIGNALS=['Device never seen before on this account','Sign-in from a new city','Unfamiliar browser / OS combination'];
+const ROLES={
+ 'finance-user':{title:['Accounts Clerk','Junior Accountant'],dept:'Finance'},
+ 'finance-approver':{title:['Finance Manager','Financial Controller'],dept:'Finance'},
+ hr:{title:['HR Specialist','Recruiter'],dept:'HR'},
+ dev:{title:['Software Developer','QA Engineer'],dept:'Engineering'},
+ intern:{title:['Engineering Intern'],dept:'Engineering'},
+ sre:{title:['Site Reliability Engineer'],dept:'Engineering'},
+ admin:{title:['Systems Administrator'],dept:'IT'},
+ helpdesk:{title:['Helpdesk Technician'],dept:'IT'},
+ sales:{title:['Sales Representative','Account Executive'],dept:'Sales'},
+ marketing:{title:['Marketing Coordinator'],dept:'Marketing'},
+ exec:{title:['COO','VP Operations'],dept:'Executive'},
+ contractor:{title:['External Contractor'],dept:'Vendor'}};
+const RES={
+ intranet:{name:'Company Intranet',sens:0,perm:{read:'*'}},
+ assets:{name:'Brand Asset Library',sens:0,perm:{read:['marketing','sales','exec']}},
+ crm:{name:'Sales CRM',sens:1,perm:{read:['sales','marketing','exec'],write:['sales']}},
+ repo:{name:'Source Code Repository',sens:1,perm:{read:['dev','sre','admin','intern','contractor'],write:['dev','sre','admin']}},
+ ledger:{name:'Finance Ledger',sens:2,perm:{read:['finance-user','finance-approver','exec'],write:['finance-user','finance-approver']}},
+ payroll:{name:'Payroll Database',sens:2,perm:{read:['hr','finance-approver'],write:['hr']}},
+ hrrec:{name:'HR Records',sens:2,perm:{read:['hr'],write:['hr']}},
+ payments:{name:'Payments Approval Portal',sens:2,perm:{approve:['finance-approver']}},
+ prod:{name:'Production Servers (SSH)',sens:2,priv:true,perm:{read:['sre','admin','dev'],write:['sre','admin']}},
+ useradmin:{name:'User Admin Console',sens:2,priv:true,perm:{write:['helpdesk','admin']}},
+ auditlog:{name:'Audit Log Store',sens:2,perm:{read:['admin'],delete:['admin']}}};
+const SENS=['LOW · Internal','MEDIUM · Confidential','HIGH · Restricted'];
+const VERB={read:'read',write:'make changes to',approve:'approve a payment in',delete:'delete entries from'};
+const ACT={read:'READ',write:'WRITE',approve:'APPROVE',delete:'DELETE'};
+const CONCEPT={
+ authn:{lvl:1,icon:'🔐',name:'Authentication',q:'Who are you?',def:'Proving WHO someone is: passwords, MFA, session tokens, and checking the account is still valid.',analogy:'✈️ Passport control: is this passport genuine, is it really theirs, and is it still valid?'},
+ authz:{lvl:2,icon:'🎫',name:'Authorization',q:'What may you do?',def:'Deciding WHAT a proven identity is allowed to do: roles, groups, access lists (ACLs) and least privilege.',analogy:'🛂 The visa: the passport is real, but does it permit THIS activity in THIS country?'},
+ cond:{lvl:3,icon:'🌍',name:'Conditional Access',q:'Under what conditions?',def:'Granting access based on CONTEXT: location, device health, time, risk. Three outcomes: allow, step-up (extra proof) or block.',analogy:'🧳 The officer reads the situation: where you flew from, what you carry, what time it is. Odd but explainable? Extra questions. Clearly wrong? Turned back.'},
+ acct:{lvl:4,icon:'🧾',name:'Accounting / Auditing',q:'Can we prove who did what?',def:'Recording who did what, when and with whose approval so every action is traceable and nobody can deny it (non-repudiation).',analogy:'📹 The CCTV and the logbook: if nothing is recorded, nobody is accountable.'}};
+const NAMES={authn:'🔐 Authentication',authz:'🎫 Authorization',cond:'🌍 Conditional Access',acct:'🧾 Accounting / Audit',legit:'✅ Letting good users in'};
+const ORDER=['authn','authz','cond','acct'];
+
+const GROUP=r=>'SG-'+r.user.role.toUpperCase();
+const allowed=(role,res,act)=>{const p=RES[res].perm[act];return !!p&&(p==='*'||p.includes(role))};
+const hhmm=r=>pad(r.ctx.hour)+':'+pad(r.ctx.min);
+const isNight=h=>h<6||h>=20;
+const ip=()=>ri(41,196)+'.'+ri(0,255)+'.'+ri(0,255)+'.'+ri(1,254);
+</script>
+<script>
+/* js/core/state.js */
+/* ============================================================
+   Game state and audio
+   The single game-state object G, the current difficulty level, and the beep helper.
+   ============================================================ */
+'use strict';
+
+const G={screen:'start',day:1,lives:3,biz:100,score:0,relaxed:false,seed:'',sound:true,stats:{},dayStats:null,mistakes:[],queue:[],idx:0,cur:null,locked:false,paused:false,pendingDeny:false,modal:null,rbOpen:false,tid:null,tleft:0,tmax:0,tlast:0,adv:null,tt:null,snap:null,celebrated:false,streak:0,best:0,breaches:0,shiftBreaches:0,reports:[],hover:false,stepStrikes:0,fired:false};
+const lv=()=>Math.min(G.day,5);
+let AC=null;
+function beep(fr,d,t,v){if(!G.sound)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.type=t||'square';o.frequency.value=fr;g.gain.value=v||.05;o.connect(g);g.connect(AC.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+(d||.12));o.stop(AC.currentTime+(d||.12))}catch(e){}}
+</script>
+<script>
+/* js/engine/requests.js */
+/* ============================================================
+   Request factory and flaws
+   Builds a legitimate request, then the FLAWS table of things that can be wrong with it.
+   ============================================================ */
+'use strict';
+
+function makeUser(role){const f=pick(FIRST),l=pick(LAST),d=ROLES[role];
+ return{first:f,last:l,name:f+' '+l,username:(f[0]+l.replace(/ /g,'')).toLowerCase(),role,title:pick(d.title),dept:d.dept,avatar:pick(AVATARS),status:'active',note:'Employed since '+ri(2016,2025),onCall:(role==='sre'||role==='admin')&&chance(.6),shared:false,travel:null,empId:'NC-'+ri(1000,9999)}}
+const managedDev=()=>({kind:'managed',name:'NC-LT-'+ri(1000,9999)+' (Nimbus laptop)',compliant:true,issue:null});
+const byodDev=()=>({kind:'byod',name:pick(['Personal phone (Android)','Home PC (Windows 11)','Personal tablet (iPad)']),compliant:null,issue:null});
+function setTarget(r,res,action){
+ r.res=res;r.action=action;const rs=RES[res];
+ r.acct.ticket=(rs.priv&&action==='write')?{status:'valid',id:'CHG-'+ri(10000,99999),scope:rs.name,note:'Approved · change window open now'}:null;
+ r.acct.payment=res==='payments'?{id:'PAY-'+ri(1000,9999),amount:'R '+ri(12,480)+' 000',createdBy:pick(FIRST)+' '+pick(LAST)}:null;
+ if(rs.sens>=1&&r.ctx.device.kind==='byod')r.ctx.device=managedDev();
+ if(isNight(r.ctx.hour)&&!(rs.sens===2&&r.user.onCall))r.ctx.hour=ri(8,16);}
+function reuser(r,roles){r.user=makeUser(pick(roles))}
+function baseLegit(){
+ const role=pick(Object.keys(ROLES)),u=makeUser(role),combos=[];
+ for(const k in RES)for(const a in RES[k].perm){if(k==='auditlog'&&a==='delete')continue;if(allowed(role,k,a))combos.push([k,a])}
+ let pool=combos.filter(c=>c[0]!=='intranet');if(!pool.length||chance(.2))pool=combos;
+ const [res,action]=pick(pool),home=chance(.75)?'South Africa':pick(HOME);
+ const r={id:ri(100000,999999),user:u,res,action,
+  auth:{pw:'ok',attempts:0,mfa:'passed',method:pick(MFA),prompts:0,token:'ok'},
+  ctx:{country:home,city:pick(CITY[home]),ip:ip(),net:pick(NETS),device:managedDev(),hour:ri(7,17),min:ri(0,59),last:{country:home,city:pick(CITY[home]),mins:ri(700,4000)},signals:[]},
+  acct:{agent:'running',ticket:null,payment:null}};
+ setTarget(r,res,action);
+ const s=RES[res].sens;
+ if(s===0&&chance(.2))r.ctx.device=byodDev();
+ if(s===2&&u.onCall&&chance(.4))r.ctx.hour=pick([21,22,23,0,1,2,3,4,5]);
+ return r}
+
+/* ---------- flaws (what can be wrong) ---------- */
+const FLAWS={
+ badpw:{lvl:1,c:'authn',d:'deny',rules:['pw_fail'],title:'Brute-force / failed credentials',apply(r){r.auth.pw='wrong';r.auth.attempts=ri(4,12);r.auth.mfa='skipped';r.auth.method=null;return true}},
+ breached:{lvl:1,c:'authn',d:'deny',rules:['pw_breach','mfa_missing'],title:'Leaked password, no MFA',apply(r){r.auth.pw='breached';r.auth.mfa='notenrolled';r.auth.method=null;return true}},
+ nomfa:{lvl:1,c:'authn',d:'deny',rules:['mfa_missing'],title:'No MFA enrolled',apply(r){r.auth.mfa='notenrolled';r.auth.method=null;return true}},
+ fatigue:{lvl:1,c:'authn',d:'deny',rules:['mfa_fatigue'],title:'MFA fatigue attack',apply(r){r.auth.prompts=ri(9,34);r.auth.mfa='fatigue';return true}},
+ gone:{lvl:1,c:'authn',d:'deny',rules:['acct_disabled'],title:'Offboarded account still active',apply(r){if(r.user.role==='contractor'){r.user.status='expired';r.user.note='Contract ended '+ri(3,40)+' days ago'}else{r.user.status='terminated';r.user.note='Left the company '+ri(3,60)+' days ago'}return true}},
+ replay:{lvl:1,c:'authn',d:'deny',rules:['token_replay'],title:'Stolen session token',apply(r){r.auth.token='replayed';return true}},
+ wrongrole:{lvl:2,c:'authz',d:'deny',rules:['perm'],title:'Snooping outside their role',apply(r){const o=[];for(const k in RES){if(RES[k].sens<1)continue;if(Object.keys(RES[k].perm).every(a=>!allowed(r.user.role,k,a)))for(const a in RES[k].perm)o.push([k,a])}if(!o.length)return false;const t=pick(o);setTarget(r,t[0],t[1]);return true}},
+ overreach:{lvl:2,c:'authz',d:'deny',rules:['perm'],title:'Privilege creep (read ≠ write)',apply(r){reuser(r,['intern','marketing','exec','dev','finance-approver','contractor']);const o=[];for(const k in RES){const p=RES[k].perm;if(p.read&&p.write&&p.read!=='*'&&allowed(r.user.role,k,'read')&&!allowed(r.user.role,k,'write'))o.push(k)}if(!o.length)return false;setTarget(r,pick(o),'write');return true}},
+ anon:{lvl:3,c:'cond',d:'deny',rules:['anon'],title:'Anonymising network',apply(r){r.ctx.net=pick(['Tor exit node','Anonymizing VPN service','Public proxy (no-log)']);return true}},
+ impossible:{lvl:3,c:'cond',d:'deny',rules:['impossible'],title:'Impossible travel',apply(r){const b=pick(HOME.filter(x=>x!==r.ctx.country));r.ctx.last={country:b,city:pick(CITY[b]),mins:ri(15,150)};return true}},
+ geo:{lvl:3,c:'cond',d:'deny',rules:['geo_block'],title:'Sign-in from a no-operations country',apply(r){const c=pick(FOREIGN);r.ctx.country=c;r.ctx.city=pick(CITY[c]);r.ctx.last={country:'South Africa',city:'Johannesburg',mins:ri(1500,6000)};return true}},
+ rooted:{lvl:3,c:'cond',d:'deny',rules:['dev_rooted'],title:'Jailbroken / rooted device',apply(r){r.ctx.device={kind:'rooted',name:pick(['Personal phone (jailbroken iPhone)','Personal phone (rooted Android)']),compliant:false,issue:'Root / jailbreak detected'};return true}},
+ noncompliant:{lvl:3,c:'cond',d:'deny',rules:['dev_noncompliant'],title:'Unhealthy managed device',apply(r){if(RES[r.res].sens<1||r.ctx.device.kind!=='managed')return false;r.ctx.device.compliant=false;r.ctx.device.issue=pick(['Disk encryption is OFF','Critical OS patches 4 months overdue','Antivirus / EDR disabled']);return true}},
+ byodhigh:{lvl:3,c:'cond',d:'deny',rules:['dev_byod_high'],title:'Personal device on restricted data',apply(r){if(RES[r.res].sens!==2)return false;r.ctx.device=byodDev();return true}},
+ afterhours:{lvl:3,c:'cond',d:'deny',rules:['after_high'],title:'Off-hours access, not on call',apply(r){if(RES[r.res].sens!==2)return false;r.user.onCall=false;r.ctx.hour=pick([22,23,0,1,2,3,4,5]);return true}},
+ byodmed:{lvl:3,c:'cond',d:'challenge',rules:['dev_byod_med'],title:'Unmanaged device on confidential data',apply(r){if(RES[r.res].sens!==1)return false;r.ctx.device=byodDev();return true}},
+ newdev:{lvl:3,c:'cond',d:'challenge',rules:['unfamiliar'],title:'Unfamiliar sign-in properties',apply(r){if(RES[r.res].sens<1)return false;r.ctx.signals=[pick(SIGNALS)];return true}},
+ travel:{lvl:3,c:'cond',d:'challenge',rules:['geo_notice'],title:'Travelling abroad (notice on file)',apply(r){const c=pick(FOREIGN);r.ctx.country=c;r.ctx.city=pick(CITY[c]);r.ctx.last={country:'South Africa',city:'Johannesburg',mins:ri(1500,6000)};r.user.travel={country:c,days:ri(2,10)};return true}},
+ lateMed:{lvl:3,c:'cond',d:'challenge',rules:['after_med'],title:'After-hours on confidential data',apply(r){if(RES[r.res].sens!==1)return false;r.ctx.hour=pick([20,21,22,23,0,1,2,3,4,5]);return true}},
+ shared:{lvl:4,c:'acct',d:'deny',rules:['shared'],title:'Shared account',apply(r){const u=r.user;u.shared=true;u.username='shared-'+u.dept.toLowerCase();u.name='Shared login · '+u.dept+' team';u.first='The '+u.dept+' team';u.avatar='👥';u.size=ri(3,9);return true}},
+ noticket:{lvl:4,c:'acct',d:'deny',rules:['ticket'],title:'Privileged change without a valid ticket',apply(r){reuser(r,['sre','admin','helpdesk']);const o=[['prod','write'],['useradmin','write']].filter(x=>allowed(r.user.role,x[0],x[1]));if(!o.length)return false;const t=pick(o);setTarget(r,t[0],t[1]);const k=pick(['none','expired','wrong']),rs=RES[t[0]];
+  r.acct.ticket=k==='none'?{status:'none',id:'n/a',scope:'n/a',note:'No ticket attached'}:k==='expired'?{status:'expired',id:'CHG-'+ri(10000,99999),scope:rs.name,note:'Change window closed '+ri(2,9)+' days ago'}:{status:'wrong',id:'CHG-'+ri(10000,99999),scope:pick(['Marketing website deploy','Printer firmware update','Quarterly workstation patching']),note:'Approved, but for a different system'};return true}},
+ noagent:{lvl:4,c:'acct',d:'deny',rules:['agent'],title:'Logging disabled',apply(r){r.acct.agent=pick(['stopped','missing']);return true}},
+ logtamper:{lvl:4,c:'acct',d:'deny',rules:['log_tamper'],title:'Deleting audit logs',apply(r){reuser(r,['admin']);setTarget(r,'auditlog','delete');return true}},
+ sod:{lvl:4,c:'acct',d:'deny',rules:['sod'],title:'Approving their own payment',apply(r){reuser(r,['finance-approver']);setTarget(r,'payments','approve');r.acct.payment.createdBy=r.user.name;return true}}};
+</script>
+<script>
+/* js/engine/policy.js */
+/* ============================================================
+   Policy engine
+   RULES: the source of truth for allow / step-up / deny, and evaluate() which applies them.
+   ============================================================ */
+'use strict';
+
+const isForeign=r=>FOREIGN.includes(r.ctx.country);
+const hasNotice=r=>!!(r.user.travel&&r.user.travel.country===r.ctx.country);
+const sensOf=r=>RES[r.res].sens;
+const RULES=[
+ {id:'pw_fail',lvl:1,c:'authn',out:'deny',f:['pw'],desc:'The password check must succeed.',test:r=>r.auth.pw==='wrong',text:r=>`The password check failed (${r.auth.attempts} attempts): identity was never proven.`},
+ {id:'pw_breach',lvl:1,c:'authn',out:'deny',f:['pw'],desc:'Passwords found in a known breach are unacceptable, even if they "work".',test:r=>r.auth.pw==='breached',text:r=>'The password appears in a public breach dump, so anyone could have it.'},
+ {id:'mfa_missing',lvl:1,c:'authn',out:'deny',f:['mfa'],desc:'MFA must be enrolled and passed. Password-only accounts are refused.',test:r=>r.auth.mfa==='notenrolled',text:r=>'No MFA is enrolled: a password was the only thing protecting this account.'},
+ {id:'mfa_fatigue',lvl:1,c:'authn',out:'deny',f:['mfa'],desc:'An MFA "approval" after a flood of push prompts (more than 5) is an attack, not a pass.',test:r=>r.auth.mfa==='fatigue',text:r=>`MFA was only "approved" after ${r.auth.prompts} push prompts: a classic MFA-fatigue attack.`},
+ {id:'acct_disabled',lvl:1,c:'authn',out:'deny',f:['status'],desc:'Terminated or expired accounts must never get in, even with a working login.',test:r=>r.user.status!=='active',text:r=>`The account belongs to someone no longer entitled to one (${r.user.note.toLowerCase()}).`},
+ {id:'token_replay',lvl:1,c:'authn',out:'deny',f:['token'],desc:'The session token must still belong to the device that logged in.',test:r=>r.auth.token==='replayed',text:r=>'The session cookie was issued to a different device than the one presenting it (token theft).'},
+ {id:'perm',lvl:2,c:'authz',out:'deny',f:['group','acl','req'],desc:'The user\'s group must appear on the resource\'s ACL for that exact action (least privilege).',test:r=>!allowed(r.user.role,r.res,r.action),text:r=>`${GROUP(r)} is not on the ACL for ${ACT[r.action]} on ${RES[r.res].name}.`},
+ {id:'anon',lvl:3,c:'cond',out:'deny',f:['net'],desc:'No sign-ins through Tor, proxies or anonymising VPNs.',test:r=>/Tor|Anonymizing|proxy/i.test(r.ctx.net),text:r=>`The sign-in came through an anonymising network (${r.ctx.net}), hiding the real origin.`},
+ {id:'impossible',lvl:3,c:'cond',out:'deny',f:['ip','last'],desc:'Impossible travel: a different country than the last sign-in within 6 hours is blocked.',test:r=>r.ctx.last.country!==r.ctx.country&&r.ctx.last.mins<360,text:r=>`Last sign-in was ${r.ctx.last.country} ${fmtMins(r.ctx.last.mins)} ago; now ${r.ctx.country}. Nobody travels that fast.`},
+ {id:'geo_block',lvl:3,c:'cond',out:'deny',f:['ip'],desc:'Block countries where Nimbus has no operations (SA, UK, US, Germany, Kenya are fine) unless a travel notice exists.',test:r=>isForeign(r)&&!hasNotice(r),text:r=>`Sign-in from ${r.ctx.country}, where Nimbus has no operations and no travel notice is on file.`},
+ {id:'dev_rooted',lvl:3,c:'cond',out:'deny',f:['device'],desc:'Rooted / jailbroken devices are never trusted.',test:r=>r.ctx.device.kind==='rooted',text:r=>'The device is rooted/jailbroken and cannot be trusted.'},
+ {id:'dev_noncompliant',lvl:3,c:'cond',out:'deny',f:['device'],desc:'Managed but NON-compliant devices (unencrypted, unpatched, no AV) are refused for Medium/High data.',test:r=>r.ctx.device.kind==='managed'&&!r.ctx.device.compliant&&sensOf(r)>=1,text:r=>`The managed laptop is non-compliant: ${r.ctx.device.issue.toLowerCase()}.`},
+ {id:'dev_byod_high',lvl:3,c:'cond',out:'deny',f:['device'],desc:'Personal (unmanaged) devices may not touch HIGH sensitivity data.',test:r=>r.ctx.device.kind==='byod'&&sensOf(r)===2,text:r=>'An unmanaged personal device is trying to reach HIGH sensitivity data.'},
+ {id:'after_high',lvl:3,c:'cond',out:'deny',f:['time'],desc:'After hours (20:00–06:00), HIGH sensitivity data needs on-call status, otherwise deny.',test:r=>isNight(r.ctx.hour)&&sensOf(r)===2&&!r.user.onCall,text:r=>`It is ${hhmm(r)} and this user is not on call, yet wants HIGH sensitivity data.`},
+ {id:'geo_notice',lvl:3,c:'cond',out:'challenge',f:['ip','travel'],desc:'Abroad with an approved travel notice: plausible, but verify with a STEP-UP challenge.',test:r=>isForeign(r)&&hasNotice(r),text:r=>`Signing in from ${r.ctx.country}. A travel notice exists, but that proves the location is plausible, not that this is the owner.`},
+ {id:'dev_byod_med',lvl:3,c:'cond',out:'challenge',f:['device'],desc:'Personal device on MEDIUM data: STEP-UP (extra MFA).',test:r=>r.ctx.device.kind==='byod'&&sensOf(r)===1,text:r=>'Unmanaged personal device on confidential data, so verify before trusting.'},
+ {id:'after_med',lvl:3,c:'cond',out:'challenge',f:['time'],desc:'After hours on MEDIUM data: STEP-UP.',test:r=>isNight(r.ctx.hour)&&sensOf(r)===1,text:r=>`Out-of-hours access (${hhmm(r)}) to confidential data.`},
+ {id:'unfamiliar',lvl:3,c:'cond',out:'challenge',f:['signals'],desc:'Unfamiliar sign-in properties on MEDIUM/HIGH data: STEP-UP.',test:r=>r.ctx.signals.length>0&&sensOf(r)>=1,text:r=>'Risk signal: '+r.ctx.signals[0].toLowerCase()+'.'},
+ {id:'shared',lvl:4,c:'acct',out:'deny',f:['acctype','user'],desc:'Shared / generic accounts are banned: every action must trace to one person.',test:r=>r.user.shared,text:r=>`This is a shared login used by ${r.user.size} people, so actions can't be pinned on anyone.`},
+ {id:'ticket',lvl:4,c:'acct',out:'deny',f:['ticket'],desc:'Privileged WRITE (Prod servers, User admin) needs a valid change ticket scoped to that exact system.',test:r=>!!(RES[r.res].priv&&r.action==='write'&&(!r.acct.ticket||r.acct.ticket.status!=='valid')),text:r=>r.acct.ticket.status==='none'?'A privileged change was requested with no change ticket at all.':r.acct.ticket.status==='expired'?'The change ticket\'s approved window has already closed.':'The change ticket is approved for a different system.'},
+ {id:'agent',lvl:4,c:'acct',out:'deny',f:['agent'],desc:'Audit / EDR logging must be running. No logging, no access.',test:r=>r.acct.agent!=='running',text:r=>r.acct.agent==='missing'?'No audit agent is installed, so this session would go unrecorded.':'The audit agent is stopped, so this session would go unrecorded.'},
+ {id:'log_tamper',lvl:4,c:'acct',out:'deny',f:['req'],desc:'Audit logs are append-only: nobody may delete them, whatever their role.',test:r=>r.res==='auditlog'&&r.action==='delete',text:r=>'Deleting audit logs destroys the evidence trail; even admins must not be able to.'},
+ {id:'sod',lvl:4,c:'acct',out:'deny',f:['payment'],desc:'Separation of duties: nobody approves a payment they created.',test:r=>!!(r.acct.payment&&r.action==='approve'&&r.acct.payment.createdBy===r.user.name),text:r=>'The requester created this payment and is now approving it themselves.'}];
+function evaluate(r){const failed=RULES.filter(x=>x.test(r));const dec=failed.some(x=>x.out==='deny')?'deny':failed.length?'challenge':'allow';
+ return{decision:dec,failed,denyC:new Set(failed.filter(x=>x.out==='deny').map(x=>x.c))}}
+</script>
+<script>
+/* js/engine/generator.js */
+/* ============================================================
+   Queue generator
+   makeReq() builds a verified request for a given set of flaws; buildQueue() builds each shift.
+   ============================================================ */
+'use strict';
+
+function makeReq(ids){
+ const exp=!ids.length?'allow':ids.some(f=>FLAWS[f].d==='deny')?'deny':'challenge';
+ const okRules=new Set(ids.flatMap(f=>FLAWS[f].rules));
+ for(let i=0;i<500;i++){const r=baseLegit();let ok=true;
+  for(const f of ids){if(!FLAWS[f].apply(r)){ok=false;break}}
+  if(!ok)continue;const ev=evaluate(r);if(ev.decision!==exp)continue;
+  if(!ev.failed.every(x=>okRules.has(x.id)))continue;
+  if(!ids.every(f=>FLAWS[f].rules.some(id=>ev.failed.some(x=>x.id===id))))continue;
+  r.ev=ev;r.flaws=ids;r.exp=exp;r.actor=exp==='allow'?'legit':exp==='deny'?'bad':(chance(.5)?'bad':'legit');
+  const u=r.user,rs=RES[r.res],v=VERB[r.action];
+  r.line=u.shared?pick([`Hey, it's the ${u.dept} team login. We need to ${v} the ${rs.name}.`,`${u.dept} team here, can we ${v} the ${rs.name}?`]):
+   pick([`Hi, it's ${u.first} from ${u.dept}. I need to ${v} the ${rs.name}.`,`Morning! Quick one, can you let me ${v} the ${rs.name}?`,`I'm up against a deadline. Please let me ${v} the ${rs.name}!`,`Hello, ${u.first} here. Requesting access to ${v} the ${rs.name}.`]);
+  return r}
+ return null}
+function buildQueue(day){
+ const L=Math.min(day,5),N=[6,8,10,10,12][L-1],cnt={};
+ const deny=Object.keys(FLAWS).filter(f=>FLAWS[f].lvl<=L&&FLAWS[f].d==='deny'),step=Object.keys(FLAWS).filter(f=>FLAWS[f].lvl<=L&&FLAWS[f].d==='challenge');
+ const p1=c=>{const nw=c.filter(f=>FLAWS[f].lvl===L),pool=(nw.length&&chance(.55))?nw:c,m=Math.min(...pool.map(f=>cnt[f]||0)),f=pick(pool.filter(x=>(cnt[x]||0)===m));cnt[f]=(cnt[f]||0)+1;return f};
+ const q=[],pL=L===1?.5:.34,pS=L>=3?.2:0;
+ for(let i=0;i<N;i++){const x=rnd();let kind=x<pL?'legit':x<pL+pS?'step':'bad';if(i===N-1&&!q.some(r=>r.exp==='allow'))kind='legit';
+  let r=null;
+  for(let t=0;t<8&&!r;t++){let ids=[];
+   if(kind==='bad'){ids=[p1(deny)];if(L>=5&&t<3&&chance(.35)){const o=deny.filter(f=>FLAWS[f].c!==FLAWS[ids[0]].c);if(o.length)ids.push(pick(o))}}
+   else if(kind==='step')ids=[p1(step)];
+   r=makeReq(ids)}
+  q.push(r||makeReq([]))}
+ return q}
+</script>
+<script>
+/* js/engine/stories.js */
+/* ============================================================
+   Incident stories
+   Why each bad user was bad: who they really were, what happened, the lesson and the fix.
+   ============================================================ */
+'use strict';
+
+const f1=r=>r.user.first,n1=r=>r.user.name,tgt=r=>'the '+RES[r.res].name;
+const S={
+ badpw:r=>({face:'🥷',who:`A password-guessing bot, not ${f1(r)}. It had failed ${r.auth.attempts} times in a row before you let it through.`,what:`Nothing proved this was ${f1(r)}, yet the "user" got into ${tgt(r)} and stayed for hours.`,lesson:'A failed credential check means identity is unproven. A confident voice or a plausible story is not proof.',fix:'Account lockout, rate-limiting, MFA, and alerts on repeated failures.'}),
+ breached:r=>({face:'🥷',who:`A criminal using ${f1(r)}'s password, leaked in a third-party breach and sold online. ${f1(r)} reused it here and never enrolled in MFA.`,what:`With only a password to beat, the attacker quietly copied data from ${tgt(r)} over the weekend.`,lesson:'A password alone is a single factor, and reused passwords leak. Strong authentication combines factors (know + have + are).',fix:'Screen passwords against breach lists, force a reset, and require MFA for everyone.'}),
+ nomfa:r=>({face:'🎣',who:`A phisher. ${f1(r)} typed their password into a fake login page last week; with no MFA, that was all the attacker needed.`,what:`The attacker logged in as ${f1(r)} and browsed ${tgt(r)}, looking exactly like a normal user in the logs.`,lesson:'With no second factor, "proof of identity" is only something that can be phished, guessed or leaked.',fix:'Mandatory MFA enrolment, ideally phishing-resistant (FIDO2 security keys).'}),
+ fatigue:r=>({face:'🥷',who:`An attacker holding ${f1(r)}'s password. They fired off ${r.auth.prompts} push prompts until a tired ${f1(r)} tapped "Approve" just to make them stop.`,what:`The "MFA passed" tick was real, but the human behind it never consented. The attacker pivoted from ${tgt(r)} into other systems.`,lesson:'MFA is only as strong as the user\'s attention. A flood of prompts followed by an approval is an attack pattern, not a success.',fix:'Number matching, prompt rate limits, alerts on repeated denials, phishing-resistant MFA.'}),
+ gone:r=>({face:'😠',who:`${n1(r)}: ${r.user.note.toLowerCase()}. HR had offboarded them but IT never disabled the account.`,what:`${f1(r)} walked back in with a perfectly valid login and copied files from ${tgt(r)} before anyone noticed.`,lesson:'Authentication also asks "is this identity still valid?". Joiner-mover-leaver hygiene is part of proving who someone is.',fix:'Automate de-provisioning from HR records and run regular access reviews.'}),
+ replay:r=>({face:'🥷',who:`An attacker who stole ${f1(r)}'s session cookie via a look-alike login page (adversary-in-the-middle). They never needed the password or the MFA.`,what:`The stolen session looked authenticated, so the attacker rode it straight into ${tgt(r)}.`,lesson:'Authentication isn\'t only the login moment. The session itself must stay tied to the device that earned it.',fix:'Token binding, short session lifetimes, continuous re-evaluation of sessions.'}),
+ wrongrole:r=>({face:'🕵️',who:`${n1(r)} (${r.user.title}, ${r.user.dept}): genuinely who they say they are, but with no business need for ${tgt(r)}.`,what:'Because the login was valid, nobody blinked. Months later an audit found sensitive records had been copied out.',lesson:'Authenticated ≠ authorized. Knowing WHO someone is does not decide WHAT they may touch. The resource\'s ACL does.',fix:'Role-based access control, least privilege, and periodic access reviews.'}),
+ overreach:r=>({face:'🕵️',who:`${n1(r)}, a real user who legitimately holds read access but asked to ${ACT[r.action]} ${tgt(r)}.`,what:`One mistaken (or malicious) change later, ${tgt(r)} held data nobody could trust.`,lesson:'Least privilege: grant the minimum action needed. Read access is not write access.',fix:'Separate read and write roles, with approval workflows for elevation.'}),
+ anon:r=>({face:'🥷',who:`Someone hiding behind a ${r.ctx.net.toLowerCase()} while using ${f1(r)}'s valid credentials.`,what:'The logs recorded a meaningless exit-node address, so responders could not tell where the intruder really was.',lesson:'Conditional Access: valid credentials are not enough, context counts. Anonymisers hide the signals we use to judge risk.',fix:'Block anonymous proxies and Tor exit nodes in the access policy.'}),
+ impossible:r=>({face:'🥷',who:`An attacker in ${r.ctx.country}. The real ${f1(r)} had signed in from ${r.ctx.last.country} just ${fmtMins(r.ctx.last.mins)} earlier.`,what:'Nobody can be in two countries within hours, so one of those sessions was stolen, and you picked the wrong one.',lesson:'"Impossible travel" is a classic Conditional Access signal: location + time betray a stolen identity.',fix:'Risk-based policies that block or challenge impossible-travel sign-ins.'}),
+ geo:r=>({face:'🥷',who:`An intruder operating from ${r.ctx.country}, where Nimbus has no staff, no customers and no travel notice for ${f1(r)}.`,what:`The intruder spent a day inside ${tgt(r)} before the alerts fired.`,lesson:'Location is context. With no business reason for a country, blocking it removes a huge slice of attack surface.',fix:'Country allow-lists, with travel notices for legitimate exceptions.'}),
+ rooted:r=>({face:'🦠',who:`${f1(r)}'s phone, rooted/jailbroken and carrying a malicious app that read everything on screen.`,what:`Corporate data from ${tgt(r)} leaked straight through the compromised device.`,lesson:'Device health is a condition of access. An untrustworthy device cannot be trusted with a trustworthy user.',fix:'Device compliance checks (MDM) as part of Conditional Access.'}),
+ noncompliant:r=>({face:'🦠',who:`${f1(r)}'s company laptop: ${r.ctx.device.issue.toLowerCase()}.`,what:`Malware exploited the gap, lifted the session token, and moved sideways from ${tgt(r)}.`,lesson:'"Managed" is not the same as "healthy". Compliance must be checked at every sign-in.',fix:'Block non-compliant devices until they are remediated.'}),
+ byodhigh:r=>({face:'📱',who:`${f1(r)} on an unmanaged personal device. Genuinely ${f1(r)}, but the device is outside our control.`,what:`Restricted data from ${tgt(r)} ended up in the device's personal cloud backup.`,lesson:'Sensitivity + device trust: the more sensitive the data, the more we demand of the device.',fix:'Allow only managed, compliant devices for restricted data.'}),
+ afterhours:r=>({face:'🌙',who:`Whoever was at the keyboard at ${hhmm(r)}. ${f1(r)} wasn't on call and was (very likely) asleep.`,what:`The account pulled data from ${tgt(r)} in the dead of night while nobody watched the alerts.`,lesson:'Time is a signal. Sensitive access outside normal hours without a reason is suspicious.',fix:'Time-based policies, on-call rosters, and alerts for off-hours access.'}),
+ byodmed:r=>({face:'🥷',who:`An attacker with ${f1(r)}'s credentials on a personal device nobody had checked.`,what:`With no step-up challenge, the attacker pulled confidential data from ${tgt(r)} through an unmanaged browser.`,lesson:'Conditional Access is not just allow/block. When risk is medium, ask for stronger proof (step-up MFA).',fix:'Risk-based step-up for unmanaged devices.'}),
+ newdev:r=>({face:'🥷',who:`Someone with ${f1(r)}'s stolen credentials on a brand-new setup (${r.ctx.signals[0].toLowerCase()}).`,what:`Unchallenged, they read and exported data from ${tgt(r)}.`,lesson:'Unfamiliar sign-in properties are exactly what attackers look like. Step-up lets real users prove themselves in seconds.',fix:'Risk-based step-up MFA on unfamiliar sign-ins.'}),
+ travel:r=>({face:'🥷',who:`Someone using ${f1(r)}'s credentials from ${r.ctx.country}. A travel notice existed, but it proves the place is plausible, not that this is ${f1(r)}.`,what:`Attackers love notices like that. The sign-in blended in and ${tgt(r)} was drained.`,lesson:'A plausible context lowers suspicion; it never replaces verification.',fix:'Step-up MFA when signing in from travel-notice locations.'}),
+ lateMed:r=>({face:'🥷',who:`An attacker working while ${f1(r)} slept (${hhmm(r)} local time).`,what:`Nobody was watching, and ${tgt(r)} was quietly copied.`,lesson:'Out-of-hours access is not forbidden for Medium data, but it deserves extra proof.',fix:'Step-up MFA for off-hours access.'}),
+ shared:r=>({face:'👥',who:`Nobody can say. ${r.user.size} people share that login, and the password lives on a sticky note.`,what:`Data in ${tgt(r)} changed and the log just says "${r.user.username}". No one could be questioned or held accountable.`,lesson:'Accounting means every action traces to ONE person. Shared accounts destroy accountability and non-repudiation.',fix:'Individual accounts for everyone; a vault with check-out for unavoidable shared secrets.'}),
+ noticket:r=>({face:'🛠️',who:`${n1(r)}, a real administrator, acting ${r.acct.ticket.status==='none'?'without any change ticket':r.acct.ticket.status==='expired'?'on a change window that had already closed':'on a ticket that covers a different system'}.`,what:`An unapproved change to ${tgt(r)} caused an outage. Nobody could say who approved it or why, and the rollback took hours.`,lesson:'Auditing links privileged actions to an approval. No valid ticket means no traceable authority.',fix:'Require a valid, scoped change ticket (or just-in-time privileged access) before any privileged write.'}),
+ noagent:r=>({face:'🔇',who:`${n1(r)}'s machine, with its audit/EDR agent ${r.acct.agent==='missing'?'not installed':'switched off'}.`,what:'Everything done in that session went unrecorded. Investigators later found a gaping hole in the logs.',lesson:'If an action can\'t be logged it can\'t be audited, and attackers disable logging first.',fix:'Make logging a condition of access and alert when agents stop.'}),
+ logtamper:r=>({face:'🧹',who:`${n1(r)}, an administrator with permission to delete, who "just wanted to tidy up" (or an attacker covering their tracks).`,what:'The evidence trail vanished. Compliance could not prove what had happened.',lesson:'Authorization said yes, accountability says no: audit logs must be append-only and tamper-evident, even for admins.',fix:'Write-once log storage, shipped off-box to a separate security team.'}),
+ sod:r=>({face:'💸',who:`${n1(r)} created payment ${r.acct.payment.id} and then asked to approve it themselves.`,what:`${r.acct.payment.amount} went to a supplier that didn't exist.`,lesson:'Separation of duties: nobody should control a transaction end to end. Accountability needs a second pair of eyes.',fix:'Maker–checker workflows enforced by the system, not by trust.'})};
+</script>
+<script>
+/* js/ui/dossier.js */
+/* ============================================================
+   Dossier renderer
+   Draws the four-part dossier (Authentication, Authorization, Conditional Access, Accounting).
+   ============================================================ */
+'use strict';
+
+function dossierHTML(r,lvl,hl){
+ const u=r.user,c=r.ctx,a=r.auth,rs=RES[r.res],H=k=>hl&&hl.includes(k)?' hl':'';
+ const R=(k,l,v)=>`<div class="row${H(k)}"><span class="lb">${l}</span><span class="vl">${v}</span></div>`;
+ let h=`<section class="sec s-authn"><h3>🔐 Authentication <small>who are you?</small></h3>`+
+  R('user','Username',`${u.username}@nimbus.corp<br><small>${u.name} · ${u.empId}</small>`)+
+  R('pw','Password check',a.pw==='ok'?'Verified (hash match)':a.pw==='wrong'?`FAILED: ${a.attempts} attempts in 2 min`:'Verified, but the hash appears in breach corpus "Sep-2026 dump"')+
+  R('mfa','MFA',a.mfa==='passed'?`Passed: ${a.method}`:a.mfa==='skipped'?'Not reached (password failed)':a.mfa==='notenrolled'?'Not enrolled (password-only account)':`Approved on prompt #${a.prompts}, ${a.prompts-1} denied in 6 min`)+
+  R('token','Session token',a.token==='ok'?'Bound to this device ✔ (fp a41c…)':'Issued to Windows 11 / Chrome, presented by Linux / python-requests (fingerprint mismatch)')+
+  R('status','Account status (HR)',u.status==='active'?`Active: ${u.note}`:`<b>${u.status==='expired'?'CONTRACT EXPIRED':'TERMINATED'}</b>: ${u.note}`)+`</section>`;
+ if(lvl>=2){const p=rs.perm[r.action];
+  h+=`<section class="sec s-authz"><h3>🎫 Authorization <small>what may you do?</small></h3>`+
+  R('title','Job title',`${u.title} · ${u.dept}`)+R('group','Directory group',GROUP(r))+
+  R('req','Requested',`${ACT[r.action]} → ${rs.name}`)+
+  R('acl',`ACL: who may ${r.action}`,!p?'No group':p==='*'?'All staff & contractors':p.map(x=>'SG-'+x.toUpperCase()).join(', '))+`</section>`}
+ if(lvl>=3){const d=c.device;
+  h+=`<section class="sec s-cond"><h3>🌍 Conditional Access <small>under what conditions?</small></h3>`+
+  R('ip','Sign-in from',`${c.city}, ${c.country}<br><small>${c.ip}</small>`)+R('net','Network',c.net)+
+  R('last','Previous sign-in',`${c.last.city}, ${c.last.country} · ${fmtMins(c.last.mins)} ago`)+
+  R('device','Device',`${d.name}<br><small>${d.kind==='managed'?(d.compliant?'Managed · compliant ✔ (encrypted, patched, AV on)':'Managed · NON-COMPLIANT: '+d.issue):d.kind==='byod'?'Personal device · unmanaged':d.issue}</small>`)+
+  R('time','Local time',`${hhmm(r)}<br><small>On-call tonight: ${u.onCall?'Yes':'No'}</small>`)+
+  R('signals','Risk signals',c.signals.length?c.signals.join('; '):'None, familiar device & location')+
+  R('travel','Travel notice',u.travel?`Approved: ${u.travel.country} (${u.travel.days} days)`:'None on file')+`</section>`}
+ if(lvl>=4){const t=r.acct.ticket,pm=r.acct.payment;
+  h+=`<section class="sec s-acct"><h3>🧾 Accounting / Auditing <small>can we prove who did what?</small></h3>`+
+  R('acctype','Account type',u.shared?`Shared account: password known by ${u.size} people`:'Personal (single owner)')+
+  R('ticket','Change ticket',t?`${t.id} · scope: ${t.scope}<br><small>${t.note}</small>`:'Not required for this action')+
+  R('agent','Audit / EDR agent',c.device.kind==='byod'?'Gateway session logging active (no agent on personal devices)':r.acct.agent==='running'?'Running ✔ (heartbeat 12 s ago)':r.acct.agent==='missing'?'NOT INSTALLED on this device':'STOPPED: last heartbeat 3 days ago')+
+  (pm?R('payment','Payment record',`${pm.id} · ${pm.amount}<br><small>Created by ${pm.createdBy} · Approver requested: ${u.name}</small>`):'')+`</section>`}
+ return h}
+</script>
+<script>
+/* js/ui/screens.js */
+/* ============================================================
+   Screens and shift flow
+   Start screen, automatic shift briefings, play screen, HUD and shift scoring.
+   ============================================================ */
+'use strict';
+
+function setScreen(s){G.screen=s;stopTimer();clearTT();clearAdv();closeRB()}
+function screenStart(){setScreen('start');
+ $('#app').innerHTML=`<div class="wrap start"><div class="logo">🛡️</div><h1>GATEKEEPER</h1><p class="sub">Zero Trust Checkpoint · Nimbus Corp Security Operations</p>
+ <p class="pitch">Every request that reaches the gate arrives with a dossier. Decide who gets in, who gets turned back, and who gets pulled aside for extra proof. Wave the wrong person through and you'll read the incident report.</p>
+ <div class="cgrid">${ORDER.map(k=>`<div class="card"><h3>${CONCEPT[k].icon} ${CONCEPT[k].name}</h3><p>${CONCEPT[k].q}</p><p class="an">${CONCEPT[k].analogy}</p></div>`).join('')}</div>
+ <div class="opts"><label><input type="checkbox" id="oRelax"> Relaxed mode (no timer)</label>
+ <label>Class code (optional) <input type="text" id="oSeed" placeholder="e.g. CYBER-101" size="14"></label>
+ <label>Start at day <select id="oDay">${[1,2,3,4,5].map(d=>`<option>${d}</option>`).join('')}</select></label></div>
+ <button class="big" id="bStart">▶ START SHIFT</button>
+ <p class="fine">Keys: A allow · S step-up · D deny · 1-4 denial reason · R rulebook · Enter next<br>Same class code = same customers for everyone, handy for a classroom debrief.</p></div>`;
+ $('#bStart').onclick=()=>{G.relaxed=$('#oRelax').checked;G.seed=$('#oSeed').value.trim();G.day=parseInt($('#oDay').value,10)||1;G.lives=3;G.biz=100;G.score=0;G.stats={};G.reports=[];G.breaches=0;G.streak=0;G.best=0;G.celebrated=false;G.fired=false;G.stepStrikes=0;screenTransition(null)}}
+
+function clearTT(){if(G.tt){clearInterval(G.tt);G.tt=null}}
+function clearAdv(){if(G.adv){clearInterval(G.adv);G.adv=null}}
+function screenTransition(rep){setScreen('brief');const L=lv(),nc=ORDER.find(k=>CONCEPT[k].lvl===L);
+ const tips=['Study the dossier, then choose ALLOW or DENY. When you deny, stamp the reason so we know you understand the failure.','A real employee with a valid login can still be the wrong person for the job. Compare the user\'s group with the resource\'s ACL.','New button: STEP-UP. Use it when something is unusual but explainable. Block only when policy says block. Careful: two unnecessary step-ups in one shift and you are fired.','Even authorised, healthy, well-located users can be refused when we couldn\'t prove or trust the record of their actions.','Everything at once. Some requests break more than one rule, and the queue is moving faster. This is Zero Trust: never trust, always verify.'];
+ let body='';
+ if(nc){const c=CONCEPT[nc];body=`<p><b>New this shift: ${c.icon} ${c.name}</b>: ${c.q}</p><p>${c.def}</p><div class="an">${c.analogy}</div><p><b>Policy additions:</b></p><ul>${RULES.filter(x=>x.c===nc).map(x=>`<li><span class="tg ${x.out}">${x.out==='deny'?'DENY':'STEP-UP'}</span>${x.desc}</li>`).join('')}</ul>`}
+ else body=`<p>No new rules, but all four disciplines stay in force:</p><ul>${ORDER.map(k=>`<li>${CONCEPT[k].icon} <b>${CONCEPT[k].name}</b>: ${CONCEPT[k].q}</li>`).join('')}</ul>`;
+ let recap='';
+ if(rep){const weak=ORDER.filter(k=>rep.by[k]&&rep.by[k].ok/rep.by[k].n<.8);
+  recap=`<div class="card recap"><div class="rh"><div class="grade sm">${rep.grade}</div><div><b>Shift ${rep.day} complete</b><br><span class="dim">${rep.acc}% correct · ${rep.pts>=0?'+':''}${rep.pts} pts · ${rep.breaches?rep.breaches+' breach'+(rep.breaches>1?'es':''):'no breaches'}</span></div></div>${conceptBars(rep.by)}${weak.length?`<p class="dim">Worth a second look: ${weak.map(k=>CONCEPT[k].icon+' '+CONCEPT[k].name).join(', ')}. The rulebook has the details.</p>`:''}</div>`}
+ const secs=120,t0=performance.now();
+ $('#app').innerHTML=`<div class="wrap">${recap}<div class="memo"><h2>MEMO · FROM: CISO · TO: GATEKEEPER · SHIFT ${G.day}${G.day>5?' · ENDLESS':''}</h2>${body}<p><b>Briefing:</b> ${tips[L-1]}</p>${G.relaxed?'<p>(Relaxed mode: no timer.)</p>':'<p>Time per request: '+Math.max(20,50-4*Math.min(G.day,8))+' seconds.</p>'}<p>You get a fresh set of <b>3 shields</b> every shift. Admitting a bad actor <i>or</i> blocking a legitimate user costs a shield.</p></div>
+ <div class="center"><p class="dim">Take your time reading the rules. The shift starts automatically in <b>2 minutes</b>, or press the button when you are ready.</p><div class="cd"><i id="cdbar"></i></div><button class="big" id="bGo">START SHIFT ${G.day} NOW ▶</button></div></div>`;
+ const go=()=>{clearTT();startDay()};$('#bGo').onclick=go;
+ G.tt=setInterval(()=>{const p=(performance.now()-t0)/1000/secs,b=$('#cdbar');if(b)b.style.width=Math.min(100,p*100)+'%';if(p>=1)go()},100)}
+
+function startDay(){clearTT();if(G.seed)seedRng(G.seed+':'+G.day);else rnd=Math.random;
+ G.snap=JSON.stringify({score:G.score,stats:G.stats,streak:G.streak,best:G.best,breaches:G.breaches,reports:G.reports});
+ G.lives=3;G.biz=100;G.shiftBreaches=0;G.stepStrikes=0;
+ G.queue=buildQueue(G.day);G.idx=0;G.dayStats={ok:0,n:0,by:{},pts:0};G.mistakes=[];nextReq()}
+function restoreSnap(){if(G.snap)Object.assign(G,JSON.parse(G.snap))}
+function finishShift(){const d=G.dayStats,acc=d.n?Math.round(d.ok/d.n*100):0,grade=acc>=95?'S':acc>=85?'A':acc>=70?'B':acc>=50?'C':'D';
+ const rep={day:G.day,acc,grade,pts:d.pts,breaches:G.shiftBreaches,by:d.by,n:d.n,ok:d.ok};G.reports.push(rep);
+ if(G.day===5&&!G.celebrated){screenCelebration(rep);return}
+ G.day++;screenTransition(rep)}
+function nextReq(){if(G.idx>=G.queue.length){finishShift();return}
+ G.cur=G.queue[G.idx];G.locked=false;G.hover=false;G.pendingDeny=false;G.screen='play';renderPlay();startTimer()}
+function hudHTML(){return `<span class="brand">🛡️ GATEKEEPER</span><span class="stat">SHIFT <b>${G.day}</b></span><span class="stat">SCORE <b>${G.score}</b></span><span class="stat">SECURITY <b>${'🛡️'.repeat(G.lives)}${'💥'.repeat(3-G.lives)}</b></span><span class="stat">BUSINESS <span class="bar"><i style="width:${Math.max(0,G.biz)}%"></i></span></span><span class="stat">REQ <b>${Math.min(G.idx+1,G.queue.length)}/${G.queue.length}</b></span>${lv()>=3?`<span class="stat" title="Unnecessary step-ups this shift. Two and you are fired.">ESCALATIONS <b>${G.stepStrikes}/2</b></span>`:''}<div class="timer" title="time left"><i id="tbar"></i></div><button class="btn" id="bSnd">${G.sound?'🔊':'🔇'}</button><button class="btn" id="bRB">📖 Rulebook (R)</button>`}
+function updateHud(){const h=$('#hud');if(h){h.innerHTML=hudHTML();bindHud()}}
+function bindHud(){const a=$('#bRB'),b=$('#bSnd');if(a)a.onclick=()=>toggleRB(!G.rbOpen);if(b)b.onclick=()=>{G.sound=!G.sound;b.textContent=G.sound?'🔊':'🔇';beep(660,.1)}}
+function reasonList(){return ORDER.filter(k=>CONCEPT[k].lvl<=lv())}
+function renderPlay(){const r=G.cur,L=lv(),u=r.user,rs=RES[r.res];
+ $('#app').innerHTML=`<div class="wrap"><div class="hud" id="hud">${hudHTML()}</div>
+ <div class="stage"><aside class="booth"><div class="avatar">${u.avatar}</div><div class="nm">${u.name}</div><div class="dim">${u.shared?'Shared account':u.title+' · '+u.dept}</div>
+ <div class="bubble">“${r.line}”</div>
+ <div class="want"><div class="dim">REQUEST</div><div class="v ${r.action}">${ACT[r.action]}</div><div>${rs.name}</div><span class="sens s${rs.sens}">${SENS[rs.sens]}</span></div>
+ <div class="dots">${G.queue.map((q,i)=>`<i class="${i<G.idx?'d':i===G.idx?'c':''}"></i>`).join('')}</div></aside>
+ <main class="dossier" id="dos">${dossierHTML(r,L)}<div id="stamp"></div></main></div>
+ <div class="actions"><div class="btns"><button class="ab allow" id="bAllow"><b>ALLOW</b><small>A</small></button>
+ <button class="ab step" id="bStep" ${L<3?'disabled':''}><b>${L<3?'🔒 STEP-UP':'STEP-UP'}</b><small>${L<3?'unlocks on day 3':'S · extra MFA'}</small></button>
+ <button class="ab deny" id="bDeny"><b>DENY</b><small>D</small></button></div>
+ <div class="reasons" id="rsn" hidden><span class="dim">Stamp the reason:</span>${reasonList().map((k,i)=>`<button class="chip" data-c="${k}"><kbd>${i+1}</kbd>${CONCEPT[k].icon} ${CONCEPT[k].name} failure</button>`).join('')}</div>
+ <div id="fb"></div></div></div>`;
+ bindHud();$('#bAllow').onclick=()=>decide('allow');$('#bStep').onclick=()=>decide('challenge');$('#bDeny').onclick=showReasons;
+ document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>decide('deny',b.dataset.c))}
+function showReasons(){if(G.locked)return;G.pendingDeny=true;const e=$('#rsn');e.hidden=false;e.scrollIntoView({block:'nearest',behavior:'smooth'})}
+function hideReasons(){G.pendingDeny=false;const e=$('#rsn');if(e)e.hidden=true}
+</script>
+<script>
+/* js/game/timer.js */
+/* ============================================================
+   Timers
+   The per-request countdown.
+   ============================================================ */
+'use strict';
+
+function stopTimer(){if(G.tid){clearInterval(G.tid);G.tid=null}}
+function startTimer(){stopTimer();const b=$('#tbar');if(G.relaxed){if(b)b.style.width='0';return}
+ G.tmax=Math.max(20,50-4*Math.min(G.day,8));G.tleft=G.tmax;G.tlast=performance.now();
+ G.tid=setInterval(()=>{const now=performance.now();if(G.paused||G.locked||G.modal||G.rbOpen){G.tlast=now;return}G.tleft-=(now-G.tlast)/1000;G.tlast=now;const e=$('#tbar');if(e){e.style.width=Math.max(0,G.tleft/G.tmax*100)+'%';e.className=G.tleft<G.tmax*.25?'low':''}if(G.tleft<=0){stopTimer();timeout()}},100)}
+</script>
+<script>
+/* js/game/decisions.js */
+/* ============================================================
+   Decisions and feedback
+   Allow / step-up / deny logic, scoring, shield loss, the firing rule and the feedback bar.
+   ============================================================ */
+'use strict';
+
+function stamp(kind){const el=$('#stamp');if(!el)return;const m={allow:['ALLOWED','var(--green)'],deny:['DENIED','var(--red)'],challenge:['STEP-UP','var(--amber)'],timeout:['TIMED OUT','var(--dim)']}[kind];el.innerHTML=`<div class="stampmark" style="color:${m[1]};border-color:${m[1]}">${m[0]}</div>`}
+function stepResult(r){return r.actor==='bad'?`❌ <b>Step-up FAILED.</b> The person couldn't produce the second factor, so an attacker was stopped and the real owner alerted.`:`✅ <b>Step-up PASSED.</b> It really was ${r.user.first}; they proved it in seconds and got in.`}
+function passList(r,L){const a=[`Password verified, MFA passed (${r.auth.method}), session bound to device`,'Account is active'];
+ if(L>=2)a.push(`${GROUP(r)} is on the ACL for ${ACT[r.action]} on ${RES[r.res].name}`);
+ if(L>=3){a.push('Familiar location, no risk signals, no impossible travel');a.push(r.ctx.device.kind==='byod'?'Personal device is acceptable for LOW sensitivity data':'Managed, compliant device');if(isNight(r.ctx.hour))a.push('After hours, but this user is on call');else a.push('Normal working hours')}
+ if(L>=4){a.push('Personal account, logging active'+(r.acct.ticket?', valid scoped change ticket':'')+(r.acct.payment?', no conflict of interest':''))}return a}
+function failList(r){return `<ul>${r.ev.failed.map(x=>`<li>${x.text(r)}</li>`).join('')}</ul>`}
+function hlKeys(r){return [...new Set(r.ev.failed.flatMap(x=>x.f))]}
+function adj(d){G.score=Math.max(0,G.score+d);G.dayStats.pts+=d}
+
+function decide(choice,reason){
+ if(G.locked||G.screen!=='play')return;G.locked=true;stopTimer();hideReasons();
+ const r=G.cur,L=lv(),ev=r.ev,exp=r.exp,prim=ev.failed.length?ev.failed[0].c:'legit';
+ const ds=G.dayStats;ds.n++;ds.by[prim]=ds.by[prim]||{ok:0,n:0};ds.by[prim].n++;G.stats[prim]=G.stats[prim]||{ok:0,n:0};G.stats[prim].n++;
+ stamp(choice);let fb='',cls='ok',modal=null,breach=false;
+ if(choice===exp){ds.ok++;ds.by[prim].ok++;G.stats[prim].ok++;G.streak++;G.best=Math.max(G.best,G.streak);let pts=100;beep(choice==='deny'?220:760,.12,choice==='deny'?'sawtooth':'square');
+  if(choice==='allow')fb=`✔ <b>Correct.</b> Everything checked out for ${r.user.first}:<ul>${passList(r,L).slice(0,4).map(x=>`<li>${x}</li>`).join('')}</ul>`;
+  else if(choice==='challenge')fb=`✔ <b>Correct: proportional response.</b> ${stepResult(r)}<ul>${r.ev.failed.map(x=>`<li>${x.text(r)}</li>`).join('')}</ul>`;
+  else if(ev.denyC.has(reason)){pts+=50;fb=`✔ <b>Denied for the right reason (+50 bonus).</b>${failList(r)}`}
+  else{cls='meh';pts+=10;const want=[...ev.denyC][0];fb=`✔ <b>Right call, wrong stamp.</b> This was a <b>${CONCEPT[want].icon} ${CONCEPT[want].name}</b> failure: ${CONCEPT[want].def}${failList(r)}`;G.mistakes.push({t:FLAWS[r.flaws[0]].title,m:`Denied correctly but stamped ${CONCEPT[reason].name}; it was ${CONCEPT[want].name}.`})}
+  adj(pts)}
+ else{cls='bad';G.streak=0;beep(110,.35,'sawtooth',.07);
+  if(choice==='allow'&&(exp==='deny'||r.actor==='bad')){breach=true;G.lives--;G.breaches++;G.shiftBreaches++;adj(-150);modal=breachModal(r,exp);fb=`💥 <b>Security incident.</b> You admitted someone you should have stopped.`;G.mistakes.push({t:FLAWS[r.flaws[0]].title,m:'ALLOWED, breach.'})}
+  else if(choice==='allow'){G.biz-=0;adj(-25);cls='meh';modal=luckyModal(r);fb=`⚠️ <b>You skipped step-up.</b> It was the real user this time, but the policy was broken.`;G.mistakes.push({t:FLAWS[r.flaws[0]].title,m:'Allowed without step-up (lucky).'})}
+  else if(choice==='deny'&&exp==='allow'){G.lives--;G.biz-=12;adj(-25);modal=falsePosModal(r,L);fb=`😤 <b>False positive.</b> You blocked a legitimate user.`;G.mistakes.push({t:'Legitimate user',m:'Wrongly denied '+r.user.name+'.'})}
+  else if(choice==='deny'){G.biz-=5;adj(-10);cls='meh';modal=bluntModal(r);fb=`⚠️ <b>Too blunt.</b> Conditional Access prefers a proportional response.`;G.mistakes.push({t:FLAWS[r.flaws[0]].title,m:'Denied when STEP-UP was the right response.'})}
+  else if(exp==='allow'){G.biz-=4;adj(-10);cls='meh';modal=frictionModal(r,L);fb=`⚠️ <b>Needless friction.</b> Nothing was wrong with this request.`;G.mistakes.push({t:'Legitimate user',m:'Unnecessary step-up for '+r.user.name+'.'})}
+  else{G.biz-=3;cls='meh';modal=wasteModal(r);fb=`⚠️ <b>Step-up can't fix this.</b>`;G.mistakes.push({t:FLAWS[r.flaws[0]].title,m:'Used STEP-UP on a hard-deny violation.'})}}
+ if(choice==='challenge'&&exp!=='challenge'){G.stepStrikes++;if(G.stepStrikes>=2){G.fired=true;modal={cls:'',html:firedModal(r)};fb='🔥 <b>You are fired.</b>'}else if(modal){modal.html=modal.html.replace('<div class="center">','<div class="ms r"><h4>Warning 1 of 2</h4>One more unnecessary STEP-UP this shift and you are fired.</div><div class="center">')}}
+ showFb(fb,cls);updateHud();if(modal)openModal(modal.html,modal.cls)}
+function timeout(){if(G.locked)return;G.locked=true;const r=G.cur,prim=r.ev.failed.length?r.ev.failed[0].c:'legit',ds=G.dayStats;ds.n++;ds.by[prim]=ds.by[prim]||{ok:0,n:0};ds.by[prim].n++;G.stats[prim]=G.stats[prim]||{ok:0,n:0};G.stats[prim].n++;
+ stamp('timeout');G.streak=0;G.biz-=8;adj(-10);hideReasons();G.mistakes.push({t:'Timeout',m:'Ran out of time on '+r.user.name+'.'});beep(110,.3,'sawtooth');
+ const right=r.exp==='allow'?'ALLOW':r.exp==='deny'?'DENY':'STEP-UP';
+ showFb(`⏱️ <b>Queue backed up: the user gave up.</b> Slow decisions cost the business too. The right answer was <b>${right}</b>:${r.exp==='allow'?`<ul>${passList(r,lv()).slice(0,3).map(x=>`<li>${x}</li>`).join('')}</ul>`:failList(r)}`,'meh');updateHud()}
+function showFb(html,cls){const el=$('#fb');el.innerHTML=`<div class="fb ${cls}"><div class="t">${html}</div><button class="next" id="bNext">Next ▶<i id="nbar"></i></button></div>`;$('#bNext').onclick=advance;el.onmouseenter=()=>{G.hover=true};el.onmouseleave=()=>{G.hover=false};el.scrollIntoView({block:'nearest',behavior:'smooth'});if(cls==='ok')scheduleAdv()}
+function scheduleAdv(){clearAdv();const total=6000;let el=0,last=performance.now();G.adv=setInterval(()=>{const now=performance.now(),dt=now-last;last=now;if(G.modal||G.rbOpen||G.hover)return;el+=dt;const b=$('#nbar');if(b)b.style.width=Math.min(100,el/total*100)+'%';if(el>=total)advance()},100)}
+function advance(){clearAdv();if(G.modal)return;if(G.fired){restartAll();return}if(G.lives<=0){screenOver('breach');return}if(G.biz<=0){screenOver('biz');return}G.idx++;nextReq()}
+</script>
+<script>
+/* js/ui/modals.js */
+/* ============================================================
+   Incident reports and modals
+   Breach, false positive and other review pop-ups, the fired screen and the rulebook drawer.
+   ============================================================ */
+'use strict';
+
+const sec=(cls,h,b)=>`<div class="ms ${cls}"><h4>${h}</h4>${b}</div>`;
+function evidence(r){return `<details><summary>Show the dossier with the red flags highlighted</summary>${dossierHTML(r,lv(),hlKeys(r))}</details>`}
+function breachModal(r,exp){const st=r.flaws.map(f=>S[f](r)),s0=st[0],isStep=exp==='challenge',cs=[...new Set(r.flaws.map(f=>FLAWS[f].c))];
+ let h=`<h2>🚨 SECURITY INCIDENT #${r.id}</h2><p class="dim">You admitted this request. ${G.lives>0?`<b>${G.lives}</b> of 3 shields left.`:'<b>That was your last shield.</b>'}</p>
+ <div class="reveal"><div class="face">${s0.face}</div><div><b>Who it really was</b><br>${s0.who}</div></div>`+
+ sec('r','What happened next',s0.what)+sec('r','Red flags you missed',failList(r)+(isStep?'<p class="dim">The policy answer was STEP-UP: ask for stronger proof instead of trusting the context.</p>':''))+evidence(r)+
+ st.map((s,i)=>sec('a',`${CONCEPT[FLAWS[r.flaws[i]].c].icon} ${FLAWS[r.flaws[i]].title}`,`${s.lesson}`)).join('')+
+ sec('g','How to stop it',st.map(s=>s.fix).join('<br>'))+
+ sec('',`Concept: ${cs.map(c=>CONCEPT[c].name).join(' + ')}`,cs.map(c=>CONCEPT[c].def).join('<br>'))+`<div class="center"><button class="big" id="mOk">I'll be more careful ▶</button></div>`;
+ return{html:h,cls:''}}
+function luckyModal(r){const s=S[r.flaws[0]](r);return{cls:'warn',html:`<h2>⚠️ POLICY VIOLATION (you got lucky)</h2><p>This time it really was <b>${r.user.first}</b>. But the signals on that dossier describe an attacker perfectly, and policy says verify them:</p>${sec('a','Why policy asks for step-up',failList(r))}${sec('r','If it had been an attacker…',s.who+'<br>'+s.what)}${sec('g','Lesson',s.lesson)}${evidence(r)}<div class="center"><button class="big" id="mOk">Got it ▶</button></div>`}}
+function falsePosModal(r,L){return{cls:'warn',html:`<h2>😤 YOU BLOCKED A LEGITIMATE USER</h2><p><b>${r.user.name}</b> is who they say they are and met every policy. <b>You lose a shield</b> and business satisfaction drops by 12.</p>${sec('g','Everything that checked out',`<ul>${passList(r,L).map(x=>`<li>${x}</li>`).join('')}</ul>`)}${sec('a','Lesson','Deny only when you can name the failed rule. Security that blocks everyone gets bypassed (shadow IT), and that is a risk too.')}<div class="center"><button class="big" id="mOk">Understood ▶</button></div>`}}
+function bluntModal(r){const s=S[r.flaws[0]](r);return{cls:'warn',html:`<h2>⚠️ TOO BLUNT</h2><p>The request was unusual but explainable. Policy says <b>STEP-UP</b>, not block. ${r.actor==='bad'?'(Here it was an attacker, so you were safe, but a real user in the same situation would have been locked out.)':'(Here it was the real user, who is now stuck.)'}</p>${sec('a','Why step-up',failList(r))}${sec('g','Lesson','Conditional Access has three outcomes. A proportional response (extra proof) keeps real users productive and still stops attackers.')}<div class="center"><button class="big" id="mOk">Got it ▶</button></div>`}}
+function frictionModal(r,L){return{cls:'warn',html:`<h2>⚠️ NEEDLESS FRICTION</h2><p>Nothing was wrong with this request, so ${r.user.first} just got an unnecessary MFA prompt. Business −4.</p>${sec('g','Everything that checked out',`<ul>${passList(r,L).map(x=>`<li>${x}</li>`).join('')}</ul>`)}<div class="center"><button class="big" id="mOk">Got it ▶</button></div>`}}
+function wasteModal(r){return{cls:'warn',html:`<h2>⚠️ STEP-UP CAN'T FIX THIS</h2><p>Step-up asks for more proof when something is unusual but <i>explainable</i>. This request breaks a hard rule, so it should have been <b>DENIED</b>.</p>${sec('r','Failed rule(s)',failList(r))}${evidence(r)}<div class="center"><button class="big" id="mOk">Got it ▶</button></div>`}}
+function openModal(html,cls){G.modal=true;const m=$('#modal');m.innerHTML=`<div class="mbox ${cls||''}">${html}</div>`;m.classList.add('open');const b=$('#mOk');if(b){b.onclick=closeModal;b.focus()}}
+function restartAll(){G.day=1;G.lives=3;G.biz=100;G.score=0;G.stats={};G.reports=[];G.breaches=0;G.streak=0;G.best=0;G.celebrated=false;G.fired=false;G.stepStrikes=0;screenTransition(null)}
+function firedModal(r){return `<h2>🔥 YOU ARE FIRED</h2><div class="reveal"><div class="face">📦</div><div><b>Reason: you pushed too many unnecessary tasks to the administration team.</b><br>That was your second needless STEP-UP this shift.</div></div>${sec('r','What went wrong','Every STEP-UP sends a real person an MFA challenge, and often a ticket to the admin team. '+(r.exp==='allow'?`${r.user.name}'s request passed every check, so there was nothing to verify.`:'This request broke a hard rule, so it needed a DENY, not more proof.')+' Two in one shift buried the admins in avoidable work.')}${sec('g','The lesson','STEP-UP is for requests that are unusual but explainable. It is not a way to dodge a decision. Allow when everything checks out, deny when a hard rule fails, and step up only when the policy says so.')}<div class="center"><button class="big" id="mOk">Clear out my desk: back to shift 1 ▶</button></div>`}
+function closeModal(){const m=$('#modal');m.classList.remove('open');m.innerHTML='';G.modal=false;if(G.fired){restartAll();return}if(G.screen==='play'&&G.locked){if(G.lives<=0){screenOver('breach')}else if(G.biz<=0){screenOver('biz')}}}
+</script>
+<script>
+/* js/ui/rulebook.js */
+/* ============================================================
+   Rulebook
+   The in-game policy drawer (press R).
+   ============================================================ */
+'use strict';
+
+function toggleRB(on){if(G.screen!=='play'&&G.screen!=='brief'&&on)return;G.rbOpen=on;const d=$('#rb');if(on){const L=lv();d.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><h2>📖 Access Policy</h2><button class="btn" id="rbX">Close (Esc)</button></div><p class="dim">Decisions: <b>ALLOW</b>, ${L>=3?'<b>STEP-UP</b>, ':''}<b>DENY</b> + reason. The timer pauses while this is open.${L>=3?' Two unnecessary STEP-UPs in one shift gets you fired.':''}</p>`+ORDER.filter(k=>CONCEPT[k].lvl<=L).map(k=>`<div class="rbsec"><h3>${CONCEPT[k].icon} ${CONCEPT[k].name} ${CONCEPT[k].lvl===L&&L>1?'<span class="tag" style="color:var(--green);border-color:var(--green)">NEW</span>':''}</h3><p class="def">${CONCEPT[k].def}</p><p class="analogy">${CONCEPT[k].analogy}</p><ul>${RULES.filter(x=>x.c===k).map(x=>`<li><span class="tag ${x.out}">${x.out==='deny'?'DENY':'STEP-UP'}</span> ${x.desc}</li>`).join('')}</ul></div>`).join('');d.classList.add('open');$('#rbX').onclick=()=>toggleRB(false)}else d.classList.remove('open')}
+function closeRB(){G.rbOpen=false;const d=$('#rb');if(d)d.classList.remove('open')}
+</script>
+<script>
+/* js/ui/endscreens.js */
+/* ============================================================
+   Celebration and game over
+   Skill bars, fireworks, the Zero Trust certificate and the out-of-shields screen.
+   ============================================================ */
+'use strict';
+
+function conceptBars(by){return Object.keys(NAMES).filter(k=>by[k]).map(k=>{const s=by[k],p=Math.round(s.ok/s.n*100);return `<div class="mrow"><span>${NAMES[k]}</span><div class="bar wide"><i style="width:${p}%"></i></div><b>${s.ok}/${s.n}</b></div>`}).join('')}
+function countUp(el,to,ms){const t0=performance.now(),dur=ms||1800;(function f(t){const p=Math.min(1,((t||performance.now())-t0)/dur);el.textContent=Math.round(to*(1-Math.pow(1-p,3)));if(p<1&&G.screen==='win'&&typeof requestAnimationFrame!=='undefined')requestAnimationFrame(f)})(t0)}
+function startFX(){const cv=$('#fx');if(!cv||!cv.getContext)return;let c=null;try{c=cv.getContext('2d')}catch(e){}if(!c||typeof requestAnimationFrame==='undefined')return;
+ let W=0,H=0;const rs=()=>{W=cv.width=window.innerWidth;H=cv.height=window.innerHeight};rs();window.addEventListener('resize',rs);
+ const cols=['#18c1cc','#3fe0b0','#f0b24a','#ff8fa3','#8f84e8','#0a8fa6'],P=[],R=Math.random;
+ const burst=(x,y)=>{const col=cols[Math.floor(R()*cols.length)];for(let i=0;i<80;i++){const a=R()*6.283,s=1.5+R()*5.5;P.push({k:0,x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:1,c:col})}};
+ for(let i=0;i<5;i++)setTimeout(()=>{if(G.screen==='win')burst(W*(.15+.7*R()),H*(.15+.35*R()))},i*250);
+ let last=0;
+ const loop=ts=>{if(G.screen!=='win'){window.removeEventListener('resize',rs);return}
+  if(ts-last>650){burst(W*(.1+.8*R()),H*(.1+.4*R()));last=ts}
+  if(P.length<700)for(let i=0;i<3;i++)P.push({k:1,x:R()*W,y:-12,vx:(R()-.5)*2,vy:2+R()*3,l:1,c:cols[Math.floor(R()*cols.length)],r:R()*6,w:5+R()*7});
+  c.clearRect(0,0,W,H);
+  for(let i=P.length-1;i>=0;i--){const p=P[i];p.x+=p.vx;p.y+=p.vy;
+   if(p.k===0){p.vy+=.06;p.vx*=.99;p.l-=.011;c.globalAlpha=Math.max(0,p.l);c.fillStyle=p.c;c.beginPath();c.arc(p.x,p.y,2.2,0,6.283);c.fill()}
+   else{p.r+=.12;p.vx+=Math.sin(p.r)*.04;c.globalAlpha=1;c.save();c.translate(p.x,p.y);c.rotate(p.r);c.fillStyle=p.c;c.fillRect(-p.w/2,-3,p.w,6);c.restore();if(p.y>H+20)p.l=0}
+   if(p.l<=0)P.splice(i,1)}
+  c.globalAlpha=1;requestAnimationFrame(loop)};
+ requestAnimationFrame(loop)}
+
+function screenCelebration(rep){setScreen('win');G.celebrated=true;
+ let ok=0,n=0;const by={};Object.keys(G.stats).forEach(k=>{by[k]=G.stats[k];ok+=G.stats[k].ok;n+=G.stats[k].n});
+ const acc=n?Math.round(ok/n*100):0;
+ const rank=acc>=95?['👑','Chief Information Security Officer']:acc>=85?['🏛️','Principal Security Architect']:acc>=70?['🛡️','Senior Gatekeeper']:['🎖️','Certified Gatekeeper'];
+ const concOK=ORDER.every(k=>by[k]&&by[k].ok/by[k].n>=.8);
+ const badges=[[true,'🎓','Graduate','Completed all five shifts'],[G.breaches===0,'🛡️','Untouchable','Zero breaches the whole game'],[acc>=90,'🎯','Sharpshooter','90%+ accuracy overall'],[G.reports.some(r=>r.acc===100),'🏅','Perfect Shift','A 100% shift'],[G.best>=10,'🔥','On Fire','Best streak: '+G.best+' correct in a row'],[concOK,'🧠','Concept Master','80%+ in every discipline'],[!G.relaxed,'⚡','Under Pressure','Finished with the timer on']].filter(b=>b[0]);
+ const date=new Date().toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});
+ $('#app').innerHTML=`<canvas id="fx"></canvas><div class="wrap win center">
+ <div class="trophy">🏆</div>
+ <div class="kicker up" style="animation-delay:.6s">ALL FIVE SHIFTS COMPLETE</div>
+ <h1 class="wt up" style="animation-delay:.9s">ZERO TRUST CERTIFIED</h1>
+ <div class="rank up" style="animation-delay:1.3s">${rank[0]} ${rank[1]} ${rank[0]}</div>
+ <p class="pitch up" style="animation-delay:1.6s">Nimbus Corp stayed standing because of you. You verified identities, enforced least privilege, read the context and kept the audit trail honest. Take a bow.</p>
+ <div class="sgrid up" style="animation-delay:1.9s">
+  <div class="sc"><b data-cu="${G.score}">0</b>final score</div>
+  <div class="sc"><b><span data-cu="${acc}">0</span>%</b>accuracy</div>
+  <div class="sc"><b data-cu="${G.best}">0</b>best streak</div>
+  <div class="sc"><b data-cu="${G.breaches}">0</b>breaches</div></div>
+ <div class="up" style="animation-delay:2.3s"><h3 style="margin:14px 0 4px">Badges earned</h3>${badges.map((b,i)=>`<div class="badge" style="animation-delay:${2.5+i*.25}s"><span>${b[1]}</span><div><b>${b[2]}</b><br><small class="dim">${b[3]}</small></div></div>`).join('')}</div>
+ <div class="card up" style="max-width:820px;margin:18px auto;text-align:left;animation-delay:2.6s"><h3>Your skills across the whole game</h3>${conceptBars(by)}</div>
+ <div class="cert up" style="animation-delay:2.9s"><div class="cs">NIMBUS CORP · SECURITY OPERATIONS</div><h2>Certificate of Zero Trust Mastery</h2><p>This certifies that</p><input id="cname" class="cname" placeholder="Type your name here" maxlength="40"><p>completed all five shifts at the Nimbus Corp checkpoint, mastering <b>Authentication, Authorization, Conditional Access</b> and <b>Accounting &amp; Auditing</b>, with <b>${acc}%</b> accuracy, earning the rank of <b>${rank[1]}</b>.</p><div class="cdate">${date}</div></div>
+ <div class="center up" style="animation-delay:3.2s;padding-top:10px"><button class="big" id="bPrint">🖨️ PRINT / SAVE CERTIFICATE</button> <button class="btn" id="bEndless" style="padding:12px 18px;margin:6px">Keep playing (endless) ▶</button> <button class="btn" id="bAgain" style="padding:12px 18px;margin:6px">↻ Play again</button></div></div>`;
+ $('#bPrint').onclick=()=>window.print();
+ $('#bEndless').onclick=()=>{G.day=6;screenTransition(null)};
+ $('#bAgain').onclick=screenStart;
+ document.querySelectorAll('[data-cu]').forEach(el=>countUp(el,parseInt(el.dataset.cu,10)||0));
+ startFX();
+ if(G.sound)[523,659,784,1047,784,1047,1319].forEach((f,i)=>setTimeout(()=>beep(f,.28,'triangle',.08),i*160))}
+
+function screenOver(kind){setScreen('over');
+ $('#app').innerHTML=`<div class="wrap center"><div class="logo">${kind==='breach'?'💥':'📉'}</div><h1 style="font:900 36px var(--mono);color:var(--red)">${kind==='breach'?'OUT OF SHIELDS':'THE BUSINESS WALKED OUT'}</h1>
+ <p class="pitch">${kind==='breach'?'You ran out of shields. Letting in bad actors and blocking real users both cost shields. Take a breath, review the rulebook and try the shift again.':'You blocked so many legitimate users that the business started working around security. That is a risk too.'}</p>
+ <p>Score <b>${G.score}</b> · shift <b>${G.day}</b></p>
+ <div class="card" style="max-width:700px;margin:14px auto;text-align:left"><h3>Your skills so far</h3>${conceptBars(G.stats)}</div>
+ <button class="big" id="bRetry">↻ RETRY SHIFT ${G.day}</button> <button class="btn" id="bAgain" style="padding:12px 18px;margin-left:10px">Start over from shift 1</button></div>`;
+ $('#bRetry').onclick=()=>{restoreSnap();startDay()};$('#bAgain').onclick=screenStart}
+</script>
+<script>
+/* js/main.js */
+/* ============================================================
+   Entry point
+   Keyboard controls and game start.
+   ============================================================ */
+'use strict';
+
+function init(){
+ document.addEventListener('keydown',e=>{if(e.target&&e.target.matches&&e.target.matches('input,select,textarea'))return;const k=e.key.toLowerCase();
+  if(G.modal){if(k==='enter'||k===' '||k==='escape'){e.preventDefault();closeModal()}return}
+  if(G.rbOpen){if(k==='escape'||k==='r')toggleRB(false);return}
+  if(G.screen==='brief'){if(k==='enter'||k===' '){e.preventDefault();clearTT();startDay()}else if(k==='r')toggleRB(true);return}
+  if(G.screen!=='play')return;
+  if(k==='r'){toggleRB(true);return}
+  if(G.locked){if(k==='enter'||k===' '||k==='n'){e.preventDefault();advance()}return}
+  if(k==='a')decide('allow');else if(k==='s'&&lv()>=3)decide('challenge');else if(k==='d')showReasons();
+  else if(k==='escape')hideReasons();
+  else if(G.pendingDeny){const i=parseInt(k,10),l=reasonList();if(i>=1&&i<=l.length)decide('deny',l[i-1])}});
+ screenStart()}
+
+init();
+</script>
+</body>
+</html>

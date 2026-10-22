@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GATEKEEPER: Zero Trust Checkpoint</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="rb" class="rb"></div>
+<noscript>This game needs JavaScript enabled.</noscript>
+
+<!-- Plain scripts (not ES modules) so the game still runs by double-clicking index.html.
+     Order matters: each file may use things defined in the ones above it. -->
+<script src="js/core/utils.js"></script>
+<script src="js/core/data.js"></script>
+<script src="js/core/state.js"></script>
+<script src="js/engine/requests.js"></script>
+<script src="js/engine/policy.js"></script>
+<script src="js/engine/generator.js"></script>
+<script src="js/engine/stories.js"></script>
+<script src="js/ui/dossier.js"></script>
+<script src="js/ui/screens.js"></script>
+<script src="js/game/timer.js"></script>
+<script src="js/game/decisions.js"></script>
+<script src="js/ui/modals.js"></script>
+<script src="js/ui/rulebook.js"></script>
+<script src="js/ui/endscreens.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "gatekeeper",
+  "version": "1.0.0",
+  "description": "GATEKEEPER: a Zero Trust checkpoint game that teaches authentication, authorization, conditional access and auditing.",
+  "private": true,
+  "scripts": {
+    "test": "node tests/logic.test.js && node tests/ui.test.js",
+    "build": "node tools/build-single.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}
